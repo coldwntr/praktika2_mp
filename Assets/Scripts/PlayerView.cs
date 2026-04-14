@@ -10,6 +10,8 @@ public class PlayerView : NetworkBehaviour
     [SerializeField] private TMP_Text _hpText;
     [SerializeField] private GameObject _modelRoot;
 
+    private Renderer[] _cachedRenderers;
+
     private void Awake()
     {
         if (_playerNetwork == null)
@@ -25,6 +27,14 @@ public class PlayerView : NetworkBehaviour
                 _modelRoot = modelTransform.gameObject;
             }
         }
+
+        if (_modelRoot == gameObject)
+        {
+            // Never disable the root network object, otherwise respawn logic and other network behaviours stop running.
+            _modelRoot = null;
+        }
+
+        _cachedRenderers = GetComponentsInChildren<Renderer>(true);
     }
 
     public override void OnNetworkSpawn()
@@ -66,6 +76,26 @@ public class PlayerView : NetworkBehaviour
         if (_modelRoot != null)
         {
             _modelRoot.SetActive(newValue);
+            return;
+        }
+
+        SetVisualState(newValue);
+    }
+
+    private void SetVisualState(bool isVisible)
+    {
+        if (_cachedRenderers != null)
+        {
+            for (int i = 0; i < _cachedRenderers.Length; i++)
+            {
+                Renderer rendererComponent = _cachedRenderers[i];
+                if (rendererComponent == null)
+                {
+                    continue;
+                }
+
+                rendererComponent.enabled = isVisible;
+            }
         }
     }
 }
