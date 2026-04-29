@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class HealthPickup : NetworkBehaviour
@@ -18,28 +18,24 @@ public class HealthPickup : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsServer || _collected)
+        if (!IsServerInitialized || _collected)
         {
             return;
         }
 
         PlayerNetwork player = other.GetComponentInParent<PlayerNetwork>();
-        if (player == null || !player.IsAlive.Value || player.HP.Value >= player.MaxHealth)
+        if (player == null || player.IsDeadOrRespawning || player.HP >= player.MaxHealth)
         {
             return;
         }
 
-        if (!player.TryRestoreHealthServer(_healAmount))
-        {
-            return;
-        }
-
+        player.Heal(_healAmount);
         _collected = true;
         _pickupManager?.NotifyPickupCollected(_spawnPointIndex);
 
         if (NetworkObject != null && NetworkObject.IsSpawned)
         {
-            NetworkObject.Despawn(true);
+            ServerManager.Despawn(NetworkObject);
         }
     }
 }

@@ -1,9 +1,8 @@
-using Unity.Netcode.Components;
+using System;
+using UnityEngine;
 
-public class ServerAuthoritativeNetworkTransform : NetworkTransform
+[Obsolete("Legacy NGO placeholder. Remove this component from prefabs after adding FishNet NetworkTransform.")]
+public class ServerAuthoritativeNetworkTransform : MonoBehaviour
 {
-    protected override bool OnIsServerAuthoritative()
-    {
-        return true;
-    }
+    // TODO FishNet Editor setup: remove this legacy NGO placeholder from prefabs and replace it with FishNet NetworkTransform.
 }

@@ -1,19 +1,28 @@
 using System.Collections;
-using Unity.Netcode;
+using FishNet.Component.Transforming;
+using FishNet.Object;
 using UnityEngine;
 
 public class Projectile : NetworkBehaviour
 {
     [SerializeField] private Rigidbody _rigidbody;
     [SerializeField] private float _lifetime = 3f;
+    [SerializeField] private float _transformSyncInterval = 0.033f;
 
-    private ulong _ownerClientId;
-    private ulong _ownerObjectId;
+    private int _ownerClientId;
+    private int _ownerObjectId;
     private Vector3 _direction;
     private float _speed;
     private int _damage;
     private bool _initialized;
+    private bool _useManualTransformSync;
     private Coroutine _lifetimeCoroutine;
+    private bool _loggedMissingRigidbody;
+    private bool _loggedFirstTransformSync;
+    private bool _loggedFirstTransformApply;
+    private Vector3 _lastSyncedPosition;
+    private Quaternion _lastSyncedRotation;
+    private float _nextTransformSyncTime;
 
     private void Awake()
     {
@@ -23,38 +32,65 @@ public class Projectile : NetworkBehaviour
         }
     }
 
-    public void Initialize(ulong ownerClientId, ulong ownerObjectId, Vector3 direction, float speed, int damage)
+    public void Initialize(int ownerClientId, int ownerObjectId, Vector3 direction, float speed, int damage)
     {
-        if (!NetworkManager.Singleton.IsServer)
-        {
-            return;
-        }
-
         _ownerClientId = ownerClientId;
         _ownerObjectId = ownerObjectId;
-        _direction = direction.normalized;
+        _direction = direction.sqrMagnitude > 0.001f ? direction.normalized : transform.forward.normalized;
         _speed = speed;
         _damage = damage;
         _initialized = true;
-
-        ApplyVelocity();
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartServer()
     {
+        _useManualTransformSync = GetComponent<NetworkTransform>() == null;
+        Debug.Log($"Projectile OnStartServer object={name} speed={_speed} forward={_direction} ownerClientId={_ownerClientId} ownerObjectId={_ownerObjectId} IsServerInitialized={IsServerInitialized}");
+
+        if (!IsServerInitialized)
+        {
+            Debug.LogWarning($"Projectile object={name} started without server initialization.", this);
+            return;
+        }
+
+        if (_speed <= 0f)
+        {
+            Debug.LogWarning($"Projectile object={name} has non-positive speed {_speed}.", this);
+        }
+
+        if (_rigidbody == null && !_loggedMissingRigidbody)
+        {
+            _loggedMissingRigidbody = true;
+            Debug.LogWarning($"Projectile object={name} has no Rigidbody. Falling back to transform-based movement.", this);
+        }
+
         if (_rigidbody != null)
         {
-            _rigidbody.isKinematic = !IsServer;
+            _rigidbody.isKinematic = true;
+            _rigidbody.linearVelocity = Vector3.zero;
         }
 
-        if (IsServer)
+        transform.rotation = Quaternion.LookRotation(_direction.sqrMagnitude > 0.001f ? _direction : transform.forward, Vector3.up);
+        _lastSyncedPosition = transform.position;
+        _lastSyncedRotation = transform.rotation;
+        _nextTransformSyncTime = 0f;
+
+        if (_useManualTransformSync)
         {
-            ApplyVelocity();
-            _lifetimeCoroutine = StartCoroutine(LifetimeRoutine());
+            BroadcastTransformState();
         }
+
+        _lifetimeCoroutine = StartCoroutine(LifetimeRoutine());
     }
 
-    public override void OnNetworkDespawn()
+    public override void OnStartClient()
+    {
+        _useManualTransformSync = GetComponent<NetworkTransform>() == null;
+        if (_rigidbody != null)
+            _rigidbody.isKinematic = true;
+    }
+
+    public override void OnStopNetwork()
     {
         if (_lifetimeCoroutine != null)
         {
@@ -65,7 +101,7 @@ public class Projectile : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsServer || !_initialized)
+        if (!IsServerInitialized || !_initialized)
         {
             return;
         }
@@ -74,18 +110,20 @@ public class Projectile : NetworkBehaviour
 
         if (targetPlayer != null)
         {
-            if (targetPlayer.NetworkObjectId == _ownerObjectId || targetPlayer.OwnerClientId == _ownerClientId)
+            if (targetPlayer.ObjectId == _ownerObjectId || targetPlayer.OwnerId == _ownerClientId)
             {
                 return;
             }
 
-            if (targetPlayer.TryApplyDamageServer(_damage))
+            if (targetPlayer.CanReceiveDamage())
             {
+                Debug.Log($"Hit target={targetPlayer.name} serverPos={targetPlayer.transform.position} hp={targetPlayer.HP}");
+                targetPlayer.TakeDamage(_damage);
                 DespawnServer();
                 return;
             }
 
-            if (!targetPlayer.IsAlive.Value)
+            if (targetPlayer.IsDeadOrRespawning)
             {
                 DespawnServer();
                 return;
@@ -104,30 +142,88 @@ public class Projectile : NetworkBehaviour
         DespawnServer();
     }
 
-    private void ApplyVelocity()
+    private void Update()
     {
-        if (!IsServer || !_initialized || _rigidbody == null)
+        if (!IsServerInitialized || !_initialized)
         {
             return;
         }
 
-        transform.rotation = Quaternion.LookRotation(_direction, Vector3.up);
-        _rigidbody.linearVelocity = _direction * _speed;
+        if (_speed <= 0f)
+        {
+            return;
+        }
+
+        Vector3 stepDirection = _direction.sqrMagnitude > 0.001f ? _direction : transform.forward;
+        transform.position += stepDirection * (_speed * Time.deltaTime);
+
+        if (_useManualTransformSync)
+        {
+            TryBroadcastTransformState();
+        }
     }
 
     private void DespawnServer()
     {
-        if (!IsServer)
+        if (!IsServerInitialized)
         {
             return;
         }
 
         if (NetworkObject != null && NetworkObject.IsSpawned)
         {
-            NetworkObject.Despawn(true);
+            ServerManager.Despawn(NetworkObject);
             return;
         }
 
         Destroy(gameObject);
+    }
+
+    private void TryBroadcastTransformState()
+    {
+        if (Time.unscaledTime < _nextTransformSyncTime)
+        {
+            return;
+        }
+
+        if (Vector3.Distance(transform.position, _lastSyncedPosition) <= 0.0001f &&
+            Quaternion.Angle(transform.rotation, _lastSyncedRotation) <= 0.1f)
+        {
+            return;
+        }
+
+        BroadcastTransformState();
+    }
+
+    private void BroadcastTransformState()
+    {
+        _lastSyncedPosition = transform.position;
+        _lastSyncedRotation = transform.rotation;
+        _nextTransformSyncTime = Time.unscaledTime + Mathf.Max(0.02f, _transformSyncInterval);
+
+        if (!_loggedFirstTransformSync)
+        {
+            _loggedFirstTransformSync = true;
+            Debug.Log($"Projectile BroadcastTransformState object={name} position={_lastSyncedPosition} rotation={_lastSyncedRotation.eulerAngles}");
+        }
+
+        SyncTransformObserversRpc(_lastSyncedPosition, _lastSyncedRotation);
+    }
+
+    [ObserversRpc(ExcludeServer = true)]
+    private void SyncTransformObserversRpc(Vector3 position, Quaternion rotation)
+    {
+        if (IsServerInitialized || !_useManualTransformSync)
+        {
+            return;
+        }
+
+        transform.SetPositionAndRotation(position, rotation);
+
+        if (!_loggedFirstTransformApply)
+        {
+            _loggedFirstTransformApply = true;
+            Debug.Log($"Projectile ApplyRemoteTransform object={name} position={position} rotation={rotation.eulerAngles}");
+        }
     }
 }

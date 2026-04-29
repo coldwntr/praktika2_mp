@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerCamera : NetworkBehaviour
@@ -9,7 +9,7 @@ public class PlayerCamera : NetworkBehaviour
 
     private Camera _targetCamera;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartClient()
     {
         enabled = IsOwner;
 
@@ -19,6 +19,12 @@ public class PlayerCamera : NetworkBehaviour
         }
 
         AttachCamera();
+    }
+
+    public override void OnStopClient()
+    {
+        if (!IsOwner)
+            enabled = false;
     }
 
     private void LateUpdate()

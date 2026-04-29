@@ -1,12 +1,12 @@
 using System;
-using Unity.Netcode;
-using Unity.Netcode.Components;
+using FishNet.Component.Transforming;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerSpawner : NetworkBehaviour
 {
     [SerializeField] private CharacterController _characterController;
-    [SerializeField] private NetworkTransform _networkTransform;
+    [SerializeField] private PlayerMovement _playerMovement;
 
     private static PlayerSpawnPoint[] _cachedSpawnPoints;
 
@@ -17,18 +17,16 @@ public class PlayerSpawner : NetworkBehaviour
             _characterController = GetComponent<CharacterController>();
         }
 
-        if (_networkTransform == null)
+        if (_playerMovement == null)
         {
-            _networkTransform = GetComponent<NetworkTransform>();
+            _playerMovement = GetComponent<PlayerMovement>();
         }
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartServer()
     {
-        if (IsServer)
-        {
-            MoveToSpawnPoint(false);
-        }
+        Debug.Log($"PlayerSpawner OnStartServer object={name} Owner={Owner} IsServer={IsServerInitialized} hasFishNetNetworkTransform={GetComponent<NetworkTransform>() != null}");
+        Debug.Log($"PlayerSpawner initial teleport disabled for object={name}. FishNet built-in PlayerSpawner owns initial spawn placement.");
     }
 
     public void MoveToSpawnPoint()
@@ -38,8 +36,9 @@ public class PlayerSpawner : NetworkBehaviour
 
     public void MoveToSpawnPoint(bool synchronizeTeleport)
     {
-        if (!IsServer)
+        if (!IsServerInitialized)
         {
+            Debug.Log($"PlayerSpawner MoveToSpawnPoint ignored on non-server object={name} IsServerInitialized={IsServerInitialized}");
             return;
         }
 
@@ -50,11 +49,13 @@ public class PlayerSpawner : NetworkBehaviour
             return;
         }
 
+        Debug.Log($"PlayerSpawner selected spawn point object={name} spawnPoint={spawnPoint.name} currentPos={transform.position} targetPos={spawnPoint.transform.position} synchronizeTeleport={synchronizeTeleport}");
         TeleportTo(spawnPoint.transform.position, spawnPoint.transform.rotation, synchronizeTeleport);
     }
 
     private void TeleportTo(Vector3 worldPosition, Quaternion worldRotation, bool synchronizeTeleport)
     {
+        _ = synchronizeTeleport;
         bool hadController = _characterController != null && _characterController.enabled;
 
         if (hadController)
@@ -62,12 +63,10 @@ public class PlayerSpawner : NetworkBehaviour
             _characterController.enabled = false;
         }
 
+        Debug.Log($"PlayerSpawner server teleport object={name} before={transform.position} after={worldPosition} rotation={worldRotation.eulerAngles}");
         transform.SetPositionAndRotation(worldPosition, worldRotation);
-
-        if (synchronizeTeleport && _networkTransform != null)
-        {
-            _networkTransform.Teleport(worldPosition, worldRotation, transform.localScale);
-        }
+        // TODO FishNet Editor setup: add FishNet NetworkTransform or CSP reconciliation so teleports replicate cleanly.
+        _playerMovement?.ResetMotionStateServer();
 
         if (hadController)
         {

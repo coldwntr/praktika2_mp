@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.Netcode;
+using FishNet;
+using FishNet.Object;
+using FishNet.Transporting;
 using UnityEngine;
 
 public class PickupManager : MonoBehaviour
@@ -15,15 +17,15 @@ public class PickupManager : MonoBehaviour
 
     private void Start()
     {
-        if (NetworkManager.Singleton == null)
+        if (InstanceFinder.NetworkManager == null)
         {
-            Debug.LogWarning("PickupManager could not find NetworkManager.");
+            Debug.LogWarning("PickupManager could not find FishNet NetworkManager.");
             return;
         }
 
-        NetworkManager.Singleton.OnServerStarted += HandleServerStarted;
+        InstanceFinder.ServerManager.OnServerConnectionState += HandleServerConnectionState;
 
-        if (NetworkManager.Singleton.IsServer)
+        if (InstanceFinder.IsServerStarted)
         {
             HandleServerStarted();
         }
@@ -31,15 +33,21 @@ public class PickupManager : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (NetworkManager.Singleton != null)
+        if (InstanceFinder.NetworkManager != null)
         {
-            NetworkManager.Singleton.OnServerStarted -= HandleServerStarted;
+            InstanceFinder.ServerManager.OnServerConnectionState -= HandleServerConnectionState;
         }
+    }
+
+    private void HandleServerConnectionState(ServerConnectionStateArgs args)
+    {
+        if (args.ConnectionState == LocalConnectionState.Started)
+            HandleServerStarted();
     }
 
     private void HandleServerStarted()
     {
-        if (_initialized || NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+        if (_initialized || InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
         {
             return;
         }
@@ -73,7 +81,7 @@ public class PickupManager : MonoBehaviour
 
     public void NotifyPickupCollected(int spawnPointIndex)
     {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+        if (InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
         {
             return;
         }
@@ -86,7 +94,7 @@ public class PickupManager : MonoBehaviour
     {
         yield return new WaitForSeconds(_respawnDelay);
 
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+        if (InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
         {
             yield break;
         }
@@ -118,7 +126,16 @@ public class PickupManager : MonoBehaviour
             spawnPoint.transform.rotation);
 
         pickupInstance.Initialize(this, spawnPointIndex);
-        pickupInstance.NetworkObject.Spawn(true);
-        _activePickups[spawnPointIndex] = pickupInstance.NetworkObject;
+        NetworkObject networkObject = pickupInstance.GetComponent<NetworkObject>();
+        if (networkObject == null)
+        {
+            // TODO FishNet Editor setup: add FishNet NetworkObject to HealthPickup prefab and register it in DefaultPrefabObjects.
+            Debug.LogError("HealthPickup prefab is missing FishNet NetworkObject.", pickupInstance);
+            Destroy(pickupInstance.gameObject);
+            return;
+        }
+
+        InstanceFinder.ServerManager.Spawn(networkObject);
+        _activePickups[spawnPointIndex] = networkObject;
     }
 }

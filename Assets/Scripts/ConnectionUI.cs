@@ -1,5 +1,5 @@
 using TMPro;
-using Unity.Netcode;
+using FishNet;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.EventSystems;
@@ -14,7 +14,21 @@ public class ConnectionUI : MonoBehaviour
     public void StartAsHost()
     {
         SaveNickname();
-        NetworkManager.Singleton.StartHost();
+        if (InstanceFinder.NetworkManager == null)
+        {
+            Debug.LogWarning("FishNet NetworkManager was not found in the scene.");
+            return;
+        }
+
+        if (InstanceFinder.IsServerStarted || InstanceFinder.IsClientStarted)
+        {
+            Debug.LogWarning($"StartAsHost ignored because networking is already running. IsServerStarted={InstanceFinder.IsServerStarted} IsClientStarted={InstanceFinder.IsClientStarted}");
+            return;
+        }
+
+        Debug.Log("ConnectionUI StartAsHost: starting FishNet server, then local client. No custom player spawn is performed here.");
+        InstanceFinder.ServerManager.StartConnection();
+        InstanceFinder.ClientManager.StartConnection();
                                              
         if (_menuPanel != null)
             _menuPanel.SetActive(false);
@@ -23,7 +37,20 @@ public class ConnectionUI : MonoBehaviour
     public void StartAsClient()
     {
         SaveNickname();
-        NetworkManager.Singleton.StartClient(); 
+        if (InstanceFinder.NetworkManager == null)
+        {
+            Debug.LogWarning("FishNet NetworkManager was not found in the scene.");
+            return;
+        }
+
+        if (InstanceFinder.IsClientStarted)
+        {
+            Debug.LogWarning("StartAsClient ignored because FishNet client is already running.");
+            return;
+        }
+
+        Debug.Log("ConnectionUI StartAsClient: starting FishNet client only. No custom player spawn is performed here.");
+        InstanceFinder.ClientManager.StartConnection();
         if (_menuPanel != null)
             _menuPanel.SetActive(false);
     }
@@ -80,8 +107,14 @@ public class ConnectionUI : MonoBehaviour
 
     public void QuitGame()
     {
-        if (NetworkManager.Singleton != null)
-            NetworkManager.Singleton.Shutdown();
+        if (InstanceFinder.NetworkManager != null)
+        {
+            if (InstanceFinder.IsClientStarted)
+                InstanceFinder.ClientManager.StopConnection();
+
+            if (InstanceFinder.IsServerStarted)
+                InstanceFinder.ServerManager.StopConnection(true);
+        }
 
         Debug.Log("Выход из игры");
 

@@ -1,6 +1,5 @@
 using TMPro;
-using Unity.Collections;
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerView : NetworkBehaviour
@@ -37,49 +36,58 @@ public class PlayerView : NetworkBehaviour
         _cachedRenderers = GetComponentsInChildren<Renderer>(true);
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartClient()
     {
-        _playerNetwork.Nickname.OnValueChanged += OnNicknameChanged;
-        _playerNetwork.HP.OnValueChanged += OnHpChanged;
-        _playerNetwork.IsAlive.OnValueChanged += OnAliveChanged;
+        if (_playerNetwork == null)
+            return;
 
-        OnNicknameChanged(default, _playerNetwork.Nickname.Value);
-        OnHpChanged(0, _playerNetwork.HP.Value);
-        OnAliveChanged(true, _playerNetwork.IsAlive.Value);
+        Debug.Log($"PlayerView OnStartClient object={name} IsOwner={IsOwner} Owner={Owner} IsAlive={_playerNetwork.IsAlive} modelRootAssigned={_modelRoot != null} rendererCount={(_cachedRenderers != null ? _cachedRenderers.Length : 0)}");
+        _playerNetwork.NicknameChanged += HandleNicknameChanged;
+        _playerNetwork.HpChanged += HandleHpChanged;
+        _playerNetwork.AliveChanged += HandleAliveChanged;
+        RefreshView();
     }
 
-    public override void OnNetworkDespawn()
+    public override void OnStopClient()
     {
-        _playerNetwork.Nickname.OnValueChanged -= OnNicknameChanged;
-        _playerNetwork.HP.OnValueChanged -= OnHpChanged;
-        _playerNetwork.IsAlive.OnValueChanged -= OnAliveChanged;
+        if (_playerNetwork == null)
+            return;
+
+        _playerNetwork.NicknameChanged -= HandleNicknameChanged;
+        _playerNetwork.HpChanged -= HandleHpChanged;
+        _playerNetwork.AliveChanged -= HandleAliveChanged;
     }
 
-    private void OnNicknameChanged(FixedString32Bytes oldValue, FixedString32Bytes newValue)
+    private void RefreshView()
+    {
+        HandleNicknameChanged(_playerNetwork.Nickname);
+        HandleHpChanged(_playerNetwork.HP);
+        HandleAliveChanged(_playerNetwork.IsAlive);
+    }
+
+    private void HandleNicknameChanged(string nickname)
     {
         if (_nicknameText != null)
-        {
-            _nicknameText.text = newValue.ToString();
-        }
+            _nicknameText.text = nickname;
     }
 
-    private void OnHpChanged(int oldValue, int newValue)
+    private void HandleHpChanged(int hp)
     {
         if (_hpText != null)
-        {
-            _hpText.text = $"HP: {newValue}";
-        }
+            _hpText.text = $"HP: {hp}";
     }
 
-    private void OnAliveChanged(bool oldValue, bool newValue)
+    private void HandleAliveChanged(bool isAlive)
     {
+        Debug.Log($"PlayerView HandleAliveChanged object={name} IsOwner={IsOwner} isAlive={isAlive} modelRootAssigned={_modelRoot != null} rendererCount={(_cachedRenderers != null ? _cachedRenderers.Length : 0)}");
+
         if (_modelRoot != null)
         {
-            _modelRoot.SetActive(newValue);
+            _modelRoot.SetActive(isAlive);
             return;
         }
 
-        SetVisualState(newValue);
+        SetVisualState(isAlive);
     }
 
     private void SetVisualState(bool isVisible)

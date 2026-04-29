@@ -1,4 +1,6 @@
-using Unity.Netcode;
+using FishNet.Component.Transforming;
+using FishNet.Connection;
+using FishNet.Object;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -31,15 +33,38 @@ public class PlayerCombat : NetworkBehaviour
         }
     }
 
+    public override void OnStartClient()
+    {
+        Debug.Log($"PlayerCombat OnStartClient object={name} IsOwner={IsOwner} IsClient={IsClientInitialized} IsServer={IsServerInitialized} Owner={Owner}");
+    }
+
     private void Update()
     {
-        if (!IsOwner || _playerNetwork == null || !_playerNetwork.IsAlive.Value)
+        bool firePressed = Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+
+        if (!IsOwner)
         {
+            if (firePressed)
+            {
+                Debug.Log($"PlayerCombat fire ignored object={name} reason=!IsOwner IsOwner={IsOwner} IsAlive={_playerNetwork != null && _playerNetwork.IsAlive} ammo={_playerNetwork?.CurrentAmmo ?? -1} firePointAssigned={_firePoint != null} projectilePrefabAssigned={_projectilePrefab != null}");
+            }
+
             return;
         }
 
-        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        if (_playerNetwork == null || !_playerNetwork.IsAlive)
         {
+            if (firePressed)
+            {
+                Debug.Log($"PlayerCombat fire ignored object={name} reason={(_playerNetwork == null ? "missing PlayerNetwork" : "!IsAlive")} IsOwner={IsOwner} IsAlive={_playerNetwork != null && _playerNetwork.IsAlive} ammo={_playerNetwork?.CurrentAmmo ?? -1} firePointAssigned={_firePoint != null} projectilePrefabAssigned={_projectilePrefab != null}");
+            }
+
+            return;
+        }
+
+        if (firePressed)
+        {
+            Debug.Log($"PlayerCombat fire pressed object={name} IsOwner={IsOwner} IsAlive={_playerNetwork.IsAlive} ammo={_playerNetwork.CurrentAmmo} firePointAssigned={_firePoint != null} projectilePrefabAssigned={_projectilePrefab != null}");
             TryShoot();
         }
     }
@@ -52,46 +77,73 @@ public class PlayerCombat : NetworkBehaviour
             return;
         }
 
+        if (_projectilePrefab.GetComponent<NetworkObject>() == null)
+        {
+            Debug.LogWarning($"PlayerCombat object={name} projectile prefab '{_projectilePrefab.name}' has no FishNet NetworkObject.", this);
+        }
+
+        if (_projectilePrefab.GetComponent<NetworkTransform>() == null)
+        {
+            Debug.LogWarning($"PlayerCombat object={name} projectile prefab '{_projectilePrefab.name}' has no FishNet NetworkTransform. Clients may not see projectile movement.", this);
+        }
+
         Vector3 shotOrigin = _firePoint.position;
-        Vector3 shotDirection = transform.forward.normalized;
+        Vector3 shotDirection = _firePoint.forward.sqrMagnitude > 0.001f ? _firePoint.forward.normalized : transform.forward.normalized;
+
+        if (shotDirection.sqrMagnitude <= 0.001f)
+        {
+            shotDirection = Vector3.forward;
+        }
 
         RequestShootServerRpc(shotOrigin, shotDirection);
     }
 
     [ServerRpc]
-    private void RequestShootServerRpc(Vector3 clientOrigin, Vector3 clientDirection, ServerRpcParams rpcParams = default)
+    private void RequestShootServerRpc(Vector3 clientOrigin, Vector3 clientDirection, NetworkConnection sender = null)
     {
-        if (rpcParams.Receive.SenderClientId != OwnerClientId)
+        if (sender != Owner)
         {
+            Debug.LogWarning($"PlayerCombat RequestShootServerRpc rejected object={name} reason=senderIsNotOwner sender={sender} owner={Owner}");
             return;
         }
 
-        if (_playerNetwork == null || !_playerNetwork.IsAlive.Value)
+        if (_playerNetwork == null || !_playerNetwork.IsAlive)
         {
+            Debug.Log($"PlayerCombat RequestShootServerRpc rejected object={name} reason={(_playerNetwork == null ? "missing PlayerNetwork" : "!IsAlive")}");
             return;
         }
 
-        double serverTime = NetworkManager.ServerTime.Time;
+        double serverTime = Time.unscaledTimeAsDouble;
         if (serverTime < _nextAllowedShotTime)
         {
+            Debug.Log($"PlayerCombat RequestShootServerRpc rejected object={name} reason=cooldown serverTime={serverTime:F3} nextAllowed={_nextAllowedShotTime:F3}");
             return;
         }
 
-        if (_playerNetwork.CurrentAmmo.Value <= 0)
+        if (_playerNetwork.CurrentAmmo <= 0)
         {
+            Debug.Log($"PlayerCombat RequestShootServerRpc rejected object={name} reason=noAmmo");
             return;
         }
 
         if (_firePoint == null || _projectilePrefab == null)
         {
+            Debug.LogWarning($"PlayerCombat RequestShootServerRpc rejected object={name} reason=missingFirePointOrPrefab firePointAssigned={_firePoint != null} projectilePrefabAssigned={_projectilePrefab != null}");
             return;
         }
 
         Vector3 serverOrigin = _firePoint.position;
-        Vector3 validatedDirection = transform.forward.normalized;
+        Vector3 validatedDirection = _firePoint.forward.sqrMagnitude > 0.001f ? _firePoint.forward.normalized : transform.forward.normalized;
 
-        if (Vector3.Distance(clientOrigin, serverOrigin) > _maxOriginError)
+        if (validatedDirection.sqrMagnitude <= 0.001f)
         {
+            validatedDirection = Vector3.forward;
+        }
+
+        float originDistance = Vector3.Distance(clientOrigin, serverOrigin);
+        if (originDistance > _maxOriginError)
+        {
+            Debug.Log($"PlayerCombat RequestShootServerRpc rejected object={name} reason=originMismatch distance={originDistance:F3} max={_maxOriginError:F3}");
             return;
         }
 
@@ -108,6 +160,7 @@ public class PlayerCombat : NetworkBehaviour
 
         if (!_playerNetwork.TryConsumeAmmoServer(1))
         {
+            Debug.Log($"PlayerCombat RequestShootServerRpc rejected object={name} reason=TryConsumeAmmoServerFailed ammo={_playerNetwork.CurrentAmmo}");
             return;
         }
 
@@ -123,11 +176,14 @@ public class PlayerCombat : NetworkBehaviour
 
         if (projectile == null || projectileNetworkObject == null)
         {
+            // TODO FishNet Editor setup: add FishNet NetworkObject to Projectile prefab.
+            Debug.LogWarning($"PlayerCombat failed to spawn projectile for object={name}. projectileComponentAssigned={projectile != null} networkObjectAssigned={projectileNetworkObject != null}");
             Destroy(projectileInstance);
             return;
         }
 
-        projectile.Initialize(OwnerClientId, NetworkObjectId, validatedDirection, _projectileSpeed, _damage);
-        projectileNetworkObject.Spawn(true);
+        projectile.Initialize(OwnerId, ObjectId, validatedDirection, _projectileSpeed, _damage);
+        Debug.Log($"PlayerCombat RequestShootServerRpc spawning projectile object={name} ownerId={OwnerId} objectId={ObjectId} direction={validatedDirection}");
+        ServerManager.Spawn(projectileNetworkObject);
     }
 }

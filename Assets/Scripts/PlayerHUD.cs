@@ -1,5 +1,4 @@
 using TMPro;
-using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -48,18 +47,12 @@ public class PlayerHUD : MonoBehaviour
             return;
         }
 
-        if (_playerNetwork == null || _playerNetwork.IsAlive.Value || _playerNetwork.RespawnEndTime.Value <= 0d)
+        if (_playerNetwork == null || _playerNetwork.IsAlive || _playerNetwork.RespawnEndTime <= 0d)
         {
             return;
         }
 
-        if (NetworkManager.Singleton == null)
-        {
-            return;
-        }
-
-        double remainingTime = _playerNetwork.RespawnEndTime.Value - NetworkManager.Singleton.ServerTime.Time;
-        remainingTime = Mathf.Max(0f, (float)remainingTime);
+        double remainingTime = _playerNetwork.GetRespawnRemainingTime();
 
         if (_respawnText != null)
         {
@@ -74,12 +67,12 @@ public class PlayerHUD : MonoBehaviour
 
     private void TryInitializeHud()
     {
-        if (_playerNetwork == null || !_playerNetwork.IsSpawned)
+        if (_playerNetwork == null || !_playerNetwork.IsClientInitialized)
         {
             return;
         }
 
-        bool shouldBeOwnerHud = _playerNetwork.IsOwner;
+        bool shouldBeOwnerHud = _playerNetwork.Owner.IsLocalClient;
         SetCanvasEnabled(shouldBeOwnerHud);
 
         if (!shouldBeOwnerHud)
@@ -96,22 +89,20 @@ public class PlayerHUD : MonoBehaviour
         _isOwnerHud = true;
         _subscribed = true;
 
-        _playerNetwork.CurrentAmmo.OnValueChanged += OnAmmoChanged;
-        _playerNetwork.IsAlive.OnValueChanged += OnAliveChanged;
-        _playerNetwork.RespawnEndTime.OnValueChanged += OnRespawnEndTimeChanged;
+        _playerNetwork.AmmoChanged += OnAmmoChanged;
+        _playerNetwork.AliveChanged += OnAliveChanged;
 
-        OnAmmoChanged(0, _playerNetwork.CurrentAmmo.Value);
-        OnAliveChanged(true, _playerNetwork.IsAlive.Value);
-        OnRespawnEndTimeChanged(0d, _playerNetwork.RespawnEndTime.Value);
+        OnAmmoChanged(_playerNetwork.CurrentAmmo);
+        OnAliveChanged(_playerNetwork.IsAlive);
+        RefreshRespawnState(_playerNetwork.IsDeadOrRespawning);
     }
 
     private void Unbind()
     {
         if (_subscribed && _playerNetwork != null)
         {
-            _playerNetwork.CurrentAmmo.OnValueChanged -= OnAmmoChanged;
-            _playerNetwork.IsAlive.OnValueChanged -= OnAliveChanged;
-            _playerNetwork.RespawnEndTime.OnValueChanged -= OnRespawnEndTimeChanged;
+            _playerNetwork.AmmoChanged -= OnAmmoChanged;
+            _playerNetwork.AliveChanged -= OnAliveChanged;
         }
 
         _subscribed = false;
@@ -130,32 +121,22 @@ public class PlayerHUD : MonoBehaviour
         RefreshRespawnState(false);
     }
 
-    private void OnAmmoChanged(int oldValue, int newValue)
+    private void OnAmmoChanged(int ammo)
     {
         if (_ammoText != null && _playerNetwork != null)
         {
-            _ammoText.text = $"Bullets: {newValue}/{_playerNetwork.MaxAmmo}";
+            _ammoText.text = $"Bullets: {ammo}/{_playerNetwork.MaxAmmo}";
         }
     }
 
-    private void OnAliveChanged(bool oldValue, bool newValue)
+    private void OnAliveChanged(bool isAlive)
     {
-        RefreshRespawnState(!newValue);
+        RefreshRespawnState(!isAlive);
 
-        if (newValue && _respawnText != null)
+        if (isAlive && _respawnText != null)
         {
             _respawnText.text = string.Empty;
         }
-    }
-
-    private void OnRespawnEndTimeChanged(double oldValue, double newValue)
-    {
-        if (_playerNetwork == null || _playerNetwork.IsAlive.Value)
-        {
-            return;
-        }
-
-        RefreshRespawnState(true);
     }
 
     private void RefreshRespawnState(bool shouldShow)
