@@ -544,6 +544,7 @@ MonoBehaviour:
   _addedNetworkObject: {fileID: 1816119810880307141}
   _networkObjectCache: {fileID: 1816119810880307141}
   _characterController: {fileID: 181103429550967386}
+  _playerMovement: {fileID: 0}
 --- !u!136 &5303125930277160729
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -671,8 +672,8 @@ MonoBehaviour:
   _moveSpeed: 5
   _rotationSpeed: 12
   _gravity: -25
-  _usePrediction: 1
   _useCameraRelativeMovement: 0
+  _usePrediction: 0
 --- !u!114 &-652476840430185199
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -707,7 +708,7 @@ MonoBehaviour:
   _useLevelOfDetail: 0
   _useRootLevelOfDetail: 1
   NetworkObserver: {fileID: 0}
-  _enablePrediction: 1
+  _enablePrediction: 0
   _predictionType: 0
   _localReconcileCorrectionType: 2
   _graphicalObject: {fileID: 0}
@@ -754,7 +755,7 @@ MonoBehaviour:
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
-  _initializedTimestamp: -8584241091941079838
+  _initializedTimestamp: -8584240681567555358
 --- !u!114 &-5942023783041536149
 MonoBehaviour:
   m_ObjectHideFlags: 0

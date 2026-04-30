@@ -827,35 +827,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Transports.UTP.UnityTransport
-  <DisconnectEvent>k__BackingField: 0
-  <DisconnectEventMessage>k__BackingField: 
-  m_ProtocolType: 0
-  m_UseWebSockets: 0
-  m_UseEncryption: 0
-  m_MaxPacketQueueSize: 128
-  m_MaxPayloadSize: 6144
-  m_MaxSendQueueSize: 0
-  m_HeartbeatTimeoutMS: 500
-  m_ConnectTimeoutMS: 1000
-  m_MaxConnectAttempts: 60
-  m_DisconnectTimeoutMS: 30000
-  ConnectionData:
-    Address: 127.0.0.1
-    Port: 7777
-    WebSocketPath: /
-    ServerListenAddress: 127.0.0.1
-    ClientBindPort: 0
-  DebugSimulator:
-    PacketDelayMS: 0
-    PacketJitterMS: 0
-    PacketDropRate: 0
-  m_ServerClientId: 0
-  m_NetworkManager: {fileID: 0}
-  m_HasForcedConnectionData: 0
-  m_ServerPrivateKey: 
-  m_ServerCertificate: 
-  m_ServerCommonName: 
-  m_ClientCaCertificate: 
 --- !u!114 &333708817
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -868,120 +839,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 593a2fe42fa9d37498c96f9a383b6521, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkManager
-  NetworkManagerExpanded: 0
-  <DistributedAuthorityMode>k__BackingField: 0
-  ClientsToRedistribute: []
-  RedistributeToClients: 0
-  DeferredDespawnObjects: []
-  <CurrentSessionOwner>k__BackingField: 0
-  ServerShutdownState: 0
-  m_ShutdownTimeout: 0
-  m_ShuttingDown: 0
-  NetworkConfig:
-    ProtocolVersion: 0
-    NetworkTransport: {fileID: 333708816}
-    PlayerPrefab: {fileID: 7244695556600276504, guid: 41544ab927014224aaedd257de50794a, type: 3}
-    Prefabs:
-      NetworkPrefabsLists:
-      - {fileID: 11400000, guid: 0dea3a8712b86224dbb5d67786dea349, type: 2}
-    TickRate: 30
-    ClientConnectionBufferTimeout: 10
-    ConnectionApproval: 0
-    ConnectionData: []
-    EnableTimeResync: 0
-    TimeResyncInterval: 30
-    EnsureNetworkVariableLengthSafety: 0
-    EnableSceneManagement: 1
-    ForceSamePrefabs: 1
-    RecycleNetworkIds: 1
-    NetworkIdRecycleDelay: 120
-    RpcHashSize: 0
-    LoadSceneTimeOut: 120
-    SpawnTimeout: 10
-    EnableNetworkLogs: 1
-    NetworkTopology: 0
-    UseCMBService: 0
-    AutoSpawnPlayerPrefabClientSide: 1
-    NetworkProfilingMetrics: 1
-    OldPrefabList: []
-  RunInBackground: 1
-  LogLevel: 1
-  <SpawnManager>k__BackingField:
-    m_PlayerObjects: []
-    m_NetworkObjectIdCounter: 0
-    m_TargetClientIds: []
-    EnableDistributeLogging: 0
-  <SceneManager>k__BackingField:
-    m_NetworkDelivery: 0
-    m_IsSceneEventActive: 0
-    PostSynchronizationSceneUnloading: 0
-    m_ActiveSceneSynchronizationEnabled: 0
-    SceneBeingSynchronized:
-      m_Handle:
-        m_Value:
-          m_Data: 0
-    IsRestoringSession: 0
-    DontDestroyOnLoadScene:
-      m_Handle:
-        m_Value:
-          m_Data: 0
-    <ClientSynchronizationMode>k__BackingField: 0
-    m_DisableValidationWarningMessages: 0
-    DeferLoadingFilter: 0
-    ClientConnectionQueue: []
-    SkipSceneHandling: 0
-    m_OriginalPostSynchronizationSceneUnloading: 0
-    DeferredObjectCreationCount: 0
-  <NetworkTimeSystem>k__BackingField:
-    m_PreviousTimeSec: 0
-    m_TimeSec: 0
-    m_CurrentLocalTimeOffset: 0
-    m_DesiredLocalTimeOffset: 0
-    m_CurrentServerTimeOffset: 0
-    m_DesiredServerTimeOffset: 0
-    <LocalBufferSec>k__BackingField: 0
-    <ServerBufferSec>k__BackingField: 0
-    <HardResetThresholdSec>k__BackingField: 0
-    <AdjustmentRatio>k__BackingField: 0
-    m_TickLatencyAverage: 0
-    TickLatency: 0
-    <LastSyncedServerTimeSec>k__BackingField: 0
-    <LastSyncedRttSec>k__BackingField: 0
-    <LastSyncedHalfRttSec>k__BackingField: 0
-    m_NetworkTransport: {fileID: 0}
-    m_NetworkTickSystem:
-      <TickRate>k__BackingField: 0
-      <LocalTime>k__BackingField:
-        m_TimeSec: 0
-        m_TickRate: 0
-        m_TickInterval: 0
-        m_CachedTick: 0
-        m_CachedTickOffset: 0
-      <ServerTime>k__BackingField:
-        m_TimeSec: 0
-        m_TickRate: 0
-        m_TickInterval: 0
-        m_CachedTick: 0
-        m_CachedTickOffset: 0
-    m_NetworkManager: {fileID: 0}
-    m_TickFrequency: 0
-    m_TimeSyncFrequencyTicks: 0
-    m_NetworkDelivery: 0
-    SyncCount: 0
-  <NetworkTickSystem>k__BackingField:
-    <TickRate>k__BackingField: 0
-    <LocalTime>k__BackingField:
-      m_TimeSec: 0
-      m_TickRate: 0
-      m_TickInterval: 0
-      m_CachedTick: 0
-      m_CachedTickOffset: 0
-    <ServerTime>k__BackingField:
-      m_TimeSec: 0
-      m_TickRate: 0
-      m_TickInterval: 0
-      m_CachedTick: 0
-      m_CachedTickOffset: 0
 --- !u!4 &333708818
 Transform:
   m_ObjectHideFlags: 0
@@ -2183,6 +2040,7 @@ GameObject:
   - component: {fileID: 1360416912}
   - component: {fileID: 1360416911}
   - component: {fileID: 1360416914}
+  - component: {fileID: 1360416915}
   m_Layer: 0
   m_Name: FishNet_NetworkManager
   m_TagString: Untagged
@@ -2263,6 +2121,27 @@ MonoBehaviour:
   - {fileID: 2113681566}
   - {fileID: 265196526}
   - {fileID: 239781784}
+--- !u!114 &1360416915
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1360416910}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 34e4a322dca349547989b14021da4e23, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FishNet.Runtime::FishNet.Managing.Transporting.TransportManager
+  Transport: {fileID: 1360416911}
+  _maximumClientPacketSize: 20480
+  _intermediateLayer: {fileID: 0}
+  _latencySimulator:
+    _enabled: 1
+    _simulateHost: 1
+    _latency: 500
+    _outOfOrder: 0
+    _packetLoss: 0
 --- !u!1 &1384823400
 GameObject:
   m_ObjectHideFlags: 0
