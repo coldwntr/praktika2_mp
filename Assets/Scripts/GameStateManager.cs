@@ -53,10 +53,18 @@ public class GameStateManager : NetworkBehaviour
 
     public static GameStateManager GetOrFind()
     {
-        if (Instance != null)
+        if (Instance != null && Instance.IsSpawned)
             return Instance;
 
-        return FindFirstObjectByType<GameStateManager>(FindObjectsInactive.Include);
+        GameStateManager[] managers = FindObjectsByType<GameStateManager>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < managers.Length; i++)
+        {
+            GameStateManager manager = managers[i];
+            if (manager != null && manager.IsSpawned)
+                return manager;
+        }
+
+        return null;
     }
 
     public override void OnStartServer()
@@ -71,6 +79,7 @@ public class GameStateManager : NetworkBehaviour
         SubscribeToPlayerSpawner();
 
         _currentState.OnChange += OnCurrentStateChanged;
+        ForceLobbyState();
         UpdateConnectedPlayersCount();
     }
 
@@ -140,6 +149,13 @@ public class GameStateManager : NetworkBehaviour
                 break;
 
             case GameState.Match:
+                if (CountSpawnedPlayersOnServer() < _requiredPlayers)
+                {
+                    Debug.LogWarning("[GameStateManager] Match aborted — not enough players on server.");
+                    ResetLobby();
+                    break;
+                }
+
                 _matchTimer.Value -= Time.deltaTime;
 
                 if (_matchTimer.Value <= 0f)
@@ -212,11 +228,18 @@ public class GameStateManager : NetworkBehaviour
 
     private int CountReadyPlayers()
     {
-        int spawnedPlayers = CountSpawnedPlayersOnServer();
-        if (spawnedPlayers > 0)
-            return spawnedPlayers;
+        return CountSpawnedPlayersOnServer();
+    }
 
-        return CountActiveConnections();
+    private void ForceLobbyState()
+    {
+        CancelInvoke(nameof(TryStartMatch));
+
+        _currentState.Value = GameState.Lobby;
+        _matchTimer.Value = 0f;
+        _resultsTimer.Value = 0f;
+        _connectedPlayers.Value = 0;
+        _lobbyRecheckTimer = 0f;
     }
 
     private int CountSpawnedPlayersOnServer()
@@ -237,30 +260,19 @@ public class GameStateManager : NetworkBehaviour
         return count;
     }
 
-    private int CountActiveConnections()
-    {
-        if (InstanceFinder.ServerManager == null)
-            return 0;
-
-        int count = InstanceFinder.ServerManager.Clients.Count;
-
-        // Host: локальный игрок не входит в Clients, но уже на сервере.
-        if (InstanceFinder.IsHostStarted)
-            count++;
-
-        return count;
-    }
-
     private void TryStartMatch()
     {
         if (_currentState.Value != GameState.Lobby)
             return;
 
-        int readyPlayers = CountReadyPlayers();
-        _connectedPlayers.Value = readyPlayers;
+        int spawnedPlayers = CountSpawnedPlayersOnServer();
+        _connectedPlayers.Value = spawnedPlayers;
 
-        if (readyPlayers < _requiredPlayers)
+        if (spawnedPlayers < _requiredPlayers)
+        {
+            Debug.Log($"[GameStateManager] Waiting for players: {spawnedPlayers}/{_requiredPlayers}");
             return;
+        }
 
         StartMatch();
     }

@@ -34,13 +34,11 @@ public class LobbyUI : MonoBehaviour
 
     private void SetPanelActive(bool isActive)
     {
-        if (_panel == null)
-            return;
-
-        if (_statusText != null)
-            _statusText.gameObject.SetActive(isActive);
-        else
+        if (_panel != null)
             _panel.SetActive(isActive);
+
+        if (_statusText != null && _statusText.gameObject.activeSelf != isActive)
+            _statusText.gameObject.SetActive(isActive);
     }
 
     private void SanitizePanelReference()

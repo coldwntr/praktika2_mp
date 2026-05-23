@@ -65,7 +65,8 @@ public class MatchHUD : MonoBehaviour
         {
             case GameState.Lobby:
             case GameState.Countdown:
-                _roundTimerText.text = "Waiting for players...";
+                _roundTimerText.text =
+                    $"Waiting for players: {manager.ConnectedPlayers} / {manager.RequiredPlayers}";
                 break;
 
             case GameState.Match:
