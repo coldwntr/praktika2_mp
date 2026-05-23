@@ -1,4 +1,5 @@
 using System.Collections;
+using FishNet;
 using FishNet.Component.Transforming;
 using FishNet.Object;
 using UnityEngine;
@@ -106,6 +107,9 @@ public class Projectile : NetworkBehaviour
             return;
         }
 
+        if (!GameStateManager.AllowsGameplay())
+            return;
+
         PlayerNetwork targetPlayer = other.GetComponentInParent<PlayerNetwork>();
 
         if (targetPlayer != null)
@@ -117,8 +121,8 @@ public class Projectile : NetworkBehaviour
 
             if (targetPlayer.CanReceiveDamage())
             {
-                Debug.Log($"Hit target={targetPlayer.name} serverPos={targetPlayer.transform.position} hp={targetPlayer.HP}");
-                targetPlayer.TakeDamage(_damage);
+                PlayerNetwork attacker = ResolveAttacker();
+                targetPlayer.TakeDamage(_damage, attacker);
                 DespawnServer();
                 return;
             }
@@ -134,6 +138,17 @@ public class Projectile : NetworkBehaviour
         {
             DespawnServer();
         }
+    }
+
+    private PlayerNetwork ResolveAttacker()
+    {
+        if (InstanceFinder.ServerManager?.Objects?.Spawned == null)
+            return null;
+
+        if (!InstanceFinder.ServerManager.Objects.Spawned.TryGetValue(_ownerObjectId, out NetworkObject ownerObject))
+            return null;
+
+        return ownerObject.GetComponent<PlayerNetwork>();
     }
 
     private IEnumerator LifetimeRoutine()

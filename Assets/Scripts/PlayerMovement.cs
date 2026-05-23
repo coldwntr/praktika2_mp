@@ -61,6 +61,7 @@ public class PlayerMovement : NetworkBehaviour
     [SerializeField] private bool _usePrediction = true;
 
     private NetworkTransform _networkTransform;
+    private Rigidbody _rigidbody;
     private float _verticalVelocity;
     private MoveData _fallbackMoveData;
     private bool _loggedPredictionInitialized;
@@ -82,6 +83,7 @@ public class PlayerMovement : NetworkBehaviour
             _characterController = GetComponent<CharacterController>();
 
         _networkTransform = GetComponent<NetworkTransform>();
+        _rigidbody = GetComponent<Rigidbody>();
     }
 
     public override void OnStartNetwork()
@@ -94,7 +96,6 @@ public class PlayerMovement : NetworkBehaviour
 
         if (_usePrediction && _networkTransform != null)
         {
-            // TODO FishNet Editor setup: remove or disable ordinary FishNet NetworkTransform on the predicted Player prefab once CSP movement is verified.
             _networkTransform.enabled = false;
         }
         else if (!_usePrediction && _networkTransform != null)
@@ -126,12 +127,18 @@ public class PlayerMovement : NetworkBehaviour
         if (!base.IsServerInitialized)
             return;
 
-        _verticalVelocity = 0f;
-        _fallbackMoveData = default;
+        ResetLocalMotionState();
+        ResetServerPhysicsState();
     }
 
     private void TimeManager_OnTick()
     {
+        if (!CanMove())
+        {
+            HandleFrozenTick();
+            return;
+        }
+
         if (_usePrediction)
         {
             MoveData moveData = base.IsOwner ? BuildMoveData() : default;
@@ -146,8 +153,49 @@ public class PlayerMovement : NetworkBehaviour
         RunServerAuthoritativeFallbackTick();
     }
 
+    private void HandleFrozenTick()
+    {
+        if (base.IsOwner)
+            ResetLocalMotionState();
+
+        if (base.IsServerInitialized)
+        {
+            ResetServerPhysicsState();
+            CreateReconcile();
+        }
+    }
+
+    private static bool CanMove()
+    {
+        return GameStateManager.AllowsGameplay();
+    }
+
+    private void ResetLocalMotionState()
+    {
+        _verticalVelocity = 0f;
+        _fallbackMoveData = default;
+    }
+
+    private void ResetServerPhysicsState()
+    {
+        if (!base.IsServerInitialized)
+            return;
+
+        if (_rigidbody == null)
+            _rigidbody = GetComponent<Rigidbody>();
+
+        if (_rigidbody == null)
+            return;
+
+        _rigidbody.linearVelocity = Vector3.zero;
+        _rigidbody.angularVelocity = Vector3.zero;
+    }
+
     private MoveData BuildMoveData()
     {
+        if (!CanMove())
+            return default;
+
         if (Keyboard.current == null)
             return default;
 
@@ -206,6 +254,14 @@ public class PlayerMovement : NetworkBehaviour
     [Replicate]
     private void Replicate(MoveData moveData, ReplicateState state = ReplicateState.Invalid, Channel channel = Channel.Unreliable)
     {
+        if (!CanMove())
+        {
+            ResetLocalMotionState();
+            if (base.IsServerInitialized)
+                ResetServerPhysicsState();
+            return;
+        }
+
         RunMovement(moveData, (float)base.TimeManager.TickDelta, logAsServerMove: base.IsServerInitialized && state.ContainsTicked());
     }
 
@@ -258,6 +314,9 @@ public class PlayerMovement : NetworkBehaviour
 
     private void RunServerAuthoritativeFallbackTick()
     {
+        if (!CanMove())
+            return;
+
         if (!_loggedFallbackMode)
         {
             _loggedFallbackMode = true;
@@ -285,6 +344,9 @@ public class PlayerMovement : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     private void SubmitFallbackMovementServerRpc(float horizontal, float vertical, float targetYaw, NetworkConnection sender = null)
     {
+        if (!CanMove())
+            return;
+
         if (sender != Owner)
         {
             Debug.LogWarning($"PlayerMovement fallback movement rejected object={name} sender={sender} owner={Owner}");
@@ -304,6 +366,14 @@ public class PlayerMovement : NetworkBehaviour
 
         if (_playerNetwork == null)
             _playerNetwork = GetComponent<PlayerNetwork>();
+
+        if (!CanMove())
+        {
+            ResetLocalMotionState();
+            if (base.IsServerInitialized)
+                ResetServerPhysicsState();
+            return;
+        }
 
         if (_playerNetwork != null && !_playerNetwork.IsAlive)
         {

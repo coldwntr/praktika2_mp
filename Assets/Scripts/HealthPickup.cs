@@ -23,6 +23,11 @@ public class HealthPickup : NetworkBehaviour
             return;
         }
 
+        if (!GameStateManager.AllowsGameplay())
+        {
+            return;
+        }
+
         PlayerNetwork player = other.GetComponentInParent<PlayerNetwork>();
         if (player == null || player.IsDeadOrRespawning || player.HP >= player.MaxHealth)
         {

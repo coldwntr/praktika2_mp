@@ -69,8 +69,16 @@ public class PlayerCombat : NetworkBehaviour
         }
     }
 
+    private static bool CanShoot()
+    {
+        return GameStateManager.AllowsGameplay();
+    }
+
     private void TryShoot()
     {
+        if (!CanShoot())
+            return;
+
         if (_firePoint == null || _projectilePrefab == null)
         {
             Debug.LogWarning("PlayerCombat is missing FirePoint or Projectile Prefab reference.", this);
@@ -106,6 +114,9 @@ public class PlayerCombat : NetworkBehaviour
             Debug.LogWarning($"PlayerCombat RequestShootServerRpc rejected object={name} reason=senderIsNotOwner sender={sender} owner={Owner}");
             return;
         }
+
+        if (!CanShoot())
+            return;
 
         if (_playerNetwork == null || !_playerNetwork.IsAlive)
         {

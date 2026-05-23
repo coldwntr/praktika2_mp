@@ -8,12 +8,35 @@ using UnityEngine;
 
 public class PickupManager : MonoBehaviour
 {
+    public static PickupManager Instance { get; private set; }
+
     [SerializeField] private HealthPickup _pickupPrefab;
     [SerializeField] private PickupSpawnPoint[] _spawnPoints;
     [SerializeField] private float _respawnDelay = 10f;
 
     private readonly Dictionary<int, NetworkObject> _activePickups = new Dictionary<int, NetworkObject>();
-    private bool _initialized;
+    private readonly Dictionary<int, Coroutine> _respawnCoroutines = new Dictionary<int, Coroutine>();
+    private bool _spawnPointsInitialized;
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Debug.LogWarning("Multiple PickupManager instances detected.", this);
+            return;
+        }
+
+        Instance = this;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+
+        if (InstanceFinder.NetworkManager != null)
+            InstanceFinder.ServerManager.OnServerConnectionState -= HandleServerConnectionState;
+    }
 
     private void Start()
     {
@@ -24,33 +47,52 @@ public class PickupManager : MonoBehaviour
         }
 
         InstanceFinder.ServerManager.OnServerConnectionState += HandleServerConnectionState;
-
-        if (InstanceFinder.IsServerStarted)
-        {
-            HandleServerStarted();
-        }
-    }
-
-    private void OnDestroy()
-    {
-        if (InstanceFinder.NetworkManager != null)
-        {
-            InstanceFinder.ServerManager.OnServerConnectionState -= HandleServerConnectionState;
-        }
+        EnsureSpawnPoints();
     }
 
     private void HandleServerConnectionState(ServerConnectionStateArgs args)
     {
         if (args.ConnectionState == LocalConnectionState.Started)
-            HandleServerStarted();
+            EnsureSpawnPoints();
     }
 
-    private void HandleServerStarted()
+    public void OnMatchStarted()
     {
-        if (_initialized || InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
-        {
+        if (InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
             return;
-        }
+
+        EnsureSpawnPoints();
+        SpawnAllPickups();
+    }
+
+    public void OnMatchEnded()
+    {
+        if (InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
+            return;
+
+        ClearAllPickups();
+    }
+
+    public void NotifyPickupCollected(int spawnPointIndex)
+    {
+        if (InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
+            return;
+
+        if (!GameStateManager.AllowsGameplay())
+            return;
+
+        _activePickups.Remove(spawnPointIndex);
+
+        if (_respawnCoroutines.TryGetValue(spawnPointIndex, out Coroutine runningRoutine) && runningRoutine != null)
+            StopCoroutine(runningRoutine);
+
+        _respawnCoroutines[spawnPointIndex] = StartCoroutine(RespawnPickupRoutine(spawnPointIndex));
+    }
+
+    private void EnsureSpawnPoints()
+    {
+        if (_spawnPointsInitialized)
+            return;
 
         if (_pickupPrefab == null)
         {
@@ -60,7 +102,7 @@ public class PickupManager : MonoBehaviour
 
         if (_spawnPoints == null || _spawnPoints.Length == 0)
         {
-            _spawnPoints = FindObjectsOfType<PickupSpawnPoint>()
+            _spawnPoints = FindObjectsByType<PickupSpawnPoint>(FindObjectsSortMode.None)
                 .OrderBy(point => point.name)
                 .ToArray();
         }
@@ -71,23 +113,16 @@ public class PickupManager : MonoBehaviour
             return;
         }
 
-        _initialized = true;
-
-        for (int i = 0; i < _spawnPoints.Length; i++)
-        {
-            SpawnPickupAtPoint(i);
-        }
+        _spawnPointsInitialized = true;
     }
 
-    public void NotifyPickupCollected(int spawnPointIndex)
+    private void SpawnAllPickups()
     {
-        if (InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
-        {
+        if (!_spawnPointsInitialized)
             return;
-        }
 
-        _activePickups.Remove(spawnPointIndex);
-        StartCoroutine(RespawnPickupRoutine(spawnPointIndex));
+        for (int i = 0; i < _spawnPoints.Length; i++)
+            SpawnPickupAtPoint(i);
     }
 
     private IEnumerator RespawnPickupRoutine(int spawnPointIndex)
@@ -95,30 +130,26 @@ public class PickupManager : MonoBehaviour
         yield return new WaitForSeconds(_respawnDelay);
 
         if (InstanceFinder.NetworkManager == null || !InstanceFinder.IsServerStarted)
-        {
             yield break;
-        }
+
+        if (!GameStateManager.AllowsGameplay())
+            yield break;
 
         SpawnPickupAtPoint(spawnPointIndex);
+        _respawnCoroutines.Remove(spawnPointIndex);
     }
 
     private void SpawnPickupAtPoint(int spawnPointIndex)
     {
-        if (spawnPointIndex < 0 || spawnPointIndex >= _spawnPoints.Length)
-        {
+        if (!_spawnPointsInitialized || spawnPointIndex < 0 || spawnPointIndex >= _spawnPoints.Length)
             return;
-        }
 
         if (_activePickups.ContainsKey(spawnPointIndex) && _activePickups[spawnPointIndex] != null)
-        {
             return;
-        }
 
         PickupSpawnPoint spawnPoint = _spawnPoints[spawnPointIndex];
         if (spawnPoint == null)
-        {
             return;
-        }
 
         HealthPickup pickupInstance = Instantiate(
             _pickupPrefab,
@@ -129,7 +160,6 @@ public class PickupManager : MonoBehaviour
         NetworkObject networkObject = pickupInstance.GetComponent<NetworkObject>();
         if (networkObject == null)
         {
-            // TODO FishNet Editor setup: add FishNet NetworkObject to HealthPickup prefab and register it in DefaultPrefabObjects.
             Debug.LogError("HealthPickup prefab is missing FishNet NetworkObject.", pickupInstance);
             Destroy(pickupInstance.gameObject);
             return;
@@ -137,5 +167,25 @@ public class PickupManager : MonoBehaviour
 
         InstanceFinder.ServerManager.Spawn(networkObject);
         _activePickups[spawnPointIndex] = networkObject;
+    }
+
+    private void ClearAllPickups()
+    {
+        foreach (KeyValuePair<int, Coroutine> pair in _respawnCoroutines)
+        {
+            if (pair.Value != null)
+                StopCoroutine(pair.Value);
+        }
+
+        _respawnCoroutines.Clear();
+
+        foreach (KeyValuePair<int, NetworkObject> pair in _activePickups)
+        {
+            NetworkObject networkObject = pair.Value;
+            if (networkObject != null && networkObject.IsSpawned)
+                InstanceFinder.ServerManager.Despawn(networkObject);
+        }
+
+        _activePickups.Clear();
     }
 }
